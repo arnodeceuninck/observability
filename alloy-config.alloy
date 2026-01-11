@@ -36,6 +36,6 @@ loki.process "drop_old" {
 // Write logs to Loki
 loki.write "local" {
   endpoint {
-    url = "http://loki:3100/loki/api/v1/push"
+    url = "http://observability-loki-1:3100/loki/api/v1/push"
   }
 }
