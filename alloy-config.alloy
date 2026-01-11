@@ -7,24 +7,22 @@ discovery.docker "local" {
 discovery.relabel "docker_logs" {
   targets = discovery.docker.local.targets
 
-  // Clean container name (removes the leading slash)
   rule {
     source_labels = ["__meta_docker_container_name"]
     regex         = "/(.*)"
     target_label  = "container"
   }
 
-  // Image name (e.g., grafana/loki:latest)
   rule {
     source_labels = ["__meta_docker_container_image"]
     target_label  = "image"
   }
 
-  // Unified "service" label for Swarm OR Compose
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_swarm_service_name"]
     target_label  = "service"
   }
+  
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service"
@@ -40,26 +38,24 @@ loki.source.docker "app_logs" {
   forward_to = [loki.process.extract_levels.receiver]
 }
 
-// 4. PROCESS: Only extract the Log Level
+// 4. PROCESS: Extract the Log Level
 loki.process "extract_levels" {
-  
-  // Try parsing Example 1 (logfmt: level=info)
   stage.logfmt {
     mapping = { "extracted_level" = "level" }
   }
 
-  // Try parsing Example 2 (Text: "... - ERROR - ...")
   stage.regex {
     expression = `(?P<py_level>ERROR|INFO|WARNING|DEBUG|CRITICAL)`
   }
 
-  // Merge whichever one was found into a single "level" label
   stage.labels {
     values = {
       level = "extracted_level",
       level = "py_level",
     }
   }
+
+  forward_to = [loki.write.grafana_loki.receiver]
 }
 
 // 5. WRITE: Send to Loki
