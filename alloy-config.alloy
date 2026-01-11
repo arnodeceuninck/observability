@@ -1,43 +1,27 @@
-// Docker Discovery - Find all Docker containers
-discovery.docker "containers" {
+// src: https://kycha-blog.org/posts/practical-guide-grafana-alloy-loki-docker
+// 1. Fetch logs coming from all your Docker containers
+discovery.docker "local" {
   host = "unix:///var/run/docker.sock"
 }
 
-// Relabel rules to extract service name from container name
-discovery.relabel "docker_logs" {
-  targets = discovery.docker.containers.targets
-
-  rule {
-    source_labels = ["__meta_docker_container_name"]
-    regex         = "/(.*)"
-    target_label  = "service_name"
-  }
-}
-
-// Collect logs from Docker containers
-loki.source.docker "default" {
+// 2.
+// https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.docker/
+loki.source.docker "app_logs" {
   host    = "unix:///var/run/docker.sock"
-  
-  targets = discovery.relabel.docker_logs.output
-  
-  labels  = {"platform" = "docker"}
-    
-  forward_to = [loki.process.drop_old.receiver]
-}
+  targets = discovery.docker.local.targets
 
-// Process logs - drop entries older than 15 minutes
-loki.process "drop_old" {
-  forward_to = [loki.write.local.receiver]
-
-  stage.drop {
-    older_than = "2h"
-    drop_counter_reason = "log_too_old"
+  // IMPORTANT: at least one label must be defined on every entry
+  labels = {
+    app = "docker",
   }
+
+  forward_to = [loki.write.grafana_loki.receiver]
 }
 
-// Write logs to Loki
-loki.write "local" {
+// 3.
+loki.write "grafana_loki" {
   endpoint {
-    url = "http://observability-loki-1:3100/loki/api/v1/push"
+    // Your Docker network will resolve "loki" to the proper IP address of the Loki container on the internal network
+    url = "http://loki:3100/loki/api/v1/push"
   }
 }
