@@ -16,11 +16,13 @@ discovery.relabel "docker_logs" {
 
 // Collect logs from Docker containers
 loki.source.docker "default" {
-  host          = "unix:///var/run/docker.sock"
-  targets       = discovery.docker.containers.targets
-  labels        = {"platform" = "docker"}
-  relabel_rules = discovery.relabel.docker_logs.rules
-  forward_to    = [loki.process.drop_old.receiver]
+  host    = "unix:///var/run/docker.sock"
+  
+  targets = discovery.relabel.docker_logs.output
+  
+  labels  = {"platform" = "docker"}
+    
+  forward_to = [loki.process.drop_old.receiver]
 }
 
 // Process logs - drop entries older than 15 minutes
@@ -28,7 +30,7 @@ loki.process "drop_old" {
   forward_to = [loki.write.local.receiver]
 
   stage.drop {
-    older_than = "15m"
+    older_than = "2h"
     drop_counter_reason = "log_too_old"
   }
 }
