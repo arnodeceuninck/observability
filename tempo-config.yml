@@ -1,0 +1,30 @@
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+traces:
+  configs:
+    - name: default
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+      processors:
+        - batch:
+            timeout: 5s
+            send_batch_size: 512
+      storage:
+        trace:
+          backend: local
+          wal:
+            path: /tmp/tempo/wal
+          local:
+            path: /tmp/tempo/blocks
+      overrides:
+        defaults:
+          max_bytes_per_trace: 5000000
+          ingestion_burst_size_bytes: 4000000
+          ingestion_rate_limit_bytes: 2000000

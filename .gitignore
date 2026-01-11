@@ -1,0 +1,7 @@
+# Environment variables
+.env
+
+# Docker volumes
+loki-data/
+tempo-data/
+grafana-storage/
