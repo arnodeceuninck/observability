@@ -1,55 +1,68 @@
-// 1. Fetch targets
+// 1. DISCOVERY: Find all containers
 discovery.docker "local" {
   host = "unix:///var/run/docker.sock"
 }
 
-// 2. Relabeling Logic
+// 2. RELABEL: Extract Docker/Swarm/Compose metadata into labels
 discovery.relabel "docker_logs" {
   targets = discovery.docker.local.targets
 
-  // ALWAYS extract the container name so we have a unique identifier
+  // Clean container name (removes the leading slash)
   rule {
     source_labels = ["__meta_docker_container_name"]
     regex         = "/(.*)"
     target_label  = "container"
   }
 
+  // Image name (e.g., grafana/loki:latest)
   rule {
     source_labels = ["__meta_docker_container_image"]
     target_label  = "image"
   }
 
-  // Map Swarm OR Compose service name to a single "service" label
+  // Unified "service" label for Swarm OR Compose
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_swarm_service_name"]
     target_label  = "service"
   }
-
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service"
   }
-
-  rule {
-    source_labels = ["__meta_docker_container_status"]
-    target_label  = "status"
-  }
 }
 
-// 3. Source the logs
+// 3. SOURCE: Fetch the logs and send to processing
 loki.source.docker "app_logs" {
   host    = "unix:///var/run/docker.sock"
   targets = discovery.relabel.docker_logs.output
-  
-  // Adding a default label here acts as a safety net
-  labels = {
-    job = "docker_logs",
-  }
+  labels  = { job = "docker_logs" }
 
-  forward_to = [loki.write.grafana_loki.receiver]
+  forward_to = [loki.process.extract_levels.receiver]
 }
 
-// 4. Write to Loki
+// 4. PROCESS: Only extract the Log Level
+loki.process "extract_levels" {
+  
+  // Try parsing Example 1 (logfmt: level=info)
+  stage.logfmt {
+    mapping = { "extracted_level" = "level" }
+  }
+
+  // Try parsing Example 2 (Text: "... - ERROR - ...")
+  stage.regex {
+    expression = `(?P<py_level>ERROR|INFO|WARNING|DEBUG|CRITICAL)`
+  }
+
+  // Merge whichever one was found into a single "level" label
+  stage.labels {
+    values = {
+      level = "extracted_level",
+      level = "py_level",
+    }
+  }
+}
+
+// 5. WRITE: Send to Loki
 loki.write "grafana_loki" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
