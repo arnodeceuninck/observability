@@ -20,7 +20,18 @@ loki.source.docker "default" {
   targets       = discovery.docker.containers.targets
   labels        = {"platform" = "docker"}
   relabel_rules = discovery.relabel.docker_logs.rules
-  forward_to    = [loki.write.local.receiver]
+  forward_to    = [loki.process.drop_old.receiver]
+}
+
+// Process logs - drop entries older than 15 minutes
+loki.process "drop_old" {
+  forward_to = [loki.write.local.receiver]
+
+  stage.drop {
+    source = "timestamp"
+    older_than = "15m"
+    drop_counter_reason = "log_too_old"
+  }
 }
 
 // Write logs to Loki
