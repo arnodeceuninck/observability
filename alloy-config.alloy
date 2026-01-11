@@ -1,27 +1,57 @@
-// src: https://kycha-blog.org/posts/practical-guide-grafana-alloy-loki-docker
-// 1. Fetch logs coming from all your Docker containers
+// 1. Fetch targets
 discovery.docker "local" {
   host = "unix:///var/run/docker.sock"
 }
 
-// 2.
-// https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.docker/
-loki.source.docker "app_logs" {
-  host    = "unix:///var/run/docker.sock"
+// 2. Relabeling Logic
+discovery.relabel "docker_logs" {
   targets = discovery.docker.local.targets
 
-  // IMPORTANT: at least one label must be defined on every entry
+  // ALWAYS extract the container name so we have a unique identifier
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_image"]
+    target_label  = "image"
+  }
+
+  // Map Swarm OR Compose service name to a single "service" label
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_swarm_service_name"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_status"]
+    target_label  = "status"
+  }
+}
+
+// 3. Source the logs
+loki.source.docker "app_logs" {
+  host    = "unix:///var/run/docker.sock"
+  targets = discovery.relabel.docker_logs.output
+  
+  // Adding a default label here acts as a safety net
   labels = {
-    app = "docker",
+    job = "docker_logs",
   }
 
   forward_to = [loki.write.grafana_loki.receiver]
 }
 
-// 3.
+// 4. Write to Loki
 loki.write "grafana_loki" {
   endpoint {
-    // Your Docker network will resolve "loki" to the proper IP address of the Loki container on the internal network
     url = "http://loki:3100/loki/api/v1/push"
   }
 }
