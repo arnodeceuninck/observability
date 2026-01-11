@@ -5,7 +5,7 @@ discovery.docker "containers" {
 
 // Relabel rules to extract service name from container name
 discovery.relabel "docker_logs" {
-  targets = []
+  targets = discovery.docker.containers.targets
 
   rule {
     source_labels = ["__meta_docker_container_name"]
